@@ -12,10 +12,13 @@ RAW_DATABASE_URL = os.getenv(
     "postgresql://magnotrack:magnotrack_secret@localhost:5432/magnotrack_db"
 )
 
-# Render and older platforms use "postgres://..." which SQLAlchemy 2.0 rejects.
-# Standardize to "postgresql://"
+# Render and older platforms provide "postgres://..." which SQLAlchemy 2.0 rejects.
+# Also, SQLAlchemy 2.0+ default for "postgresql://" looks for "psycopg" (v3).
+# Normalize to "postgresql+psycopg2://" to guarantee the installed psycopg2 driver is used.
 if RAW_DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = RAW_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = RAW_DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+elif RAW_DATABASE_URL.startswith("postgresql://") and not RAW_DATABASE_URL.startswith("postgresql+"):
+    DATABASE_URL = RAW_DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 else:
     DATABASE_URL = RAW_DATABASE_URL
 
