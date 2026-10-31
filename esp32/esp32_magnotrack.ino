@@ -31,22 +31,14 @@
 
 // Wi-Fi or Mobile Hotspot Credentials
 // (e.g. Android Mobile Hotspot)
-const char* WIFI_SSID     = "YOUR_WIFI_OR_HOTSPOT_NAME";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID     = "iQOO Neo9 Pro";       // Your Wi-Fi or Mobile Hotspot Name
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";   // Enter your Wi-Fi or Hotspot password
 
 /*
  * Backend API Endpoint:
- * 
- * FOR RENDER PRODUCTION DEPLOYMENT:
- * Enter your Render Web Service URL with "/api/sensor-data" appended.
- * Example: "https://magnotrack.onrender.com/api/sensor-data"
- *
- * FOR LOCAL DEVELOPMENT:
- * Enter your computer's local LAN IP address and port 8000.
- * Example: "http://192.168.1.105:8000/api/sensor-data"
- * (Note: Do NOT use "localhost" or "127.0.0.1" here, as that points to the ESP32 itself)
+ * Configured with your live Render Web Service URL!
  */
-const char* API_URL = "https://YOUR-APP-NAME.onrender.com/api/sensor-data";
+const char* API_URL = "https://magnotrack.onrender.com/api/sensor-data";
 
 // Device & Sensor Hardware Pins
 const char* DEVICE_ID            = "magnotrack-01";
