@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MagnoTrack – IoT Magnetic Event Monitoring System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Background decorative glow -->
+  <div class="bg-glow bg-glow-1"></div>
+  <div class="bg-glow bg-glow-2"></div>
+
+  <!-- Header / Navbar -->
+  <header class="navbar">
+    <div class="navbar-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <!-- Magnetic Flux SVG Icon -->
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 3v7a6 6 0 0 0 12 0V3"></path>
+            <line x1="4" y1="3" x2="8" y2="3"></line>
+            <line x1="16" y1="3" x2="20" y2="3"></line>
+            <line x1="4" y1="8" x2="8" y2="8"></line>
+            <line x1="16" y1="8" x2="20" y2="8"></line>
+            <circle cx="12" cy="18" r="2"></circle>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">MagnoTrack <span class="brand-badge">IoT Core</span></div>
+          <div class="brand-subtitle">IoT-Based Magnetic Event Logging and Activity Monitoring System</div>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <a href="#dashboard" class="nav-link active" data-tab="dashboard">Dashboard</a>
+        <a href="#history" class="nav-link" data-tab="history">Event History</a>
+        <a href="#system" class="nav-link" data-tab="system">System Information</a>
+        <a href="/docs" target="_blank" class="nav-link nav-link-external" title="Interactive Swagger API Documentation">
+          API Docs
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        </a>
+      </nav>
+
+      <div class="navbar-status">
+        <!-- Live Connection Status Pill -->
+        <div class="status-pill offline" id="connection-pill">
+          <span class="status-dot"></span>
+          <span class="status-text" id="connection-text">CONNECTING...</span>
+        </div>
+
+        <div class="controls-group">
+          <button id="refresh-btn" class="btn btn-icon" title="Refresh Telemetry">
+            <svg class="refresh-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+          </button>
+          <div class="auto-refresh-toggle" title="Toggle automatic 2.5s polling">
+            <input type="checkbox" id="auto-refresh-check" checked>
+            <label for="auto-refresh-check" class="toggle-label">Auto (2.5s)</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Banner (Offline or Waiting for Data) -->
+  <div class="banner-container">
+    <div id="status-banner" class="status-banner banner-warning hidden">
+      <div class="banner-content">
+        <span class="banner-icon" id="banner-icon">⚠️</span>
+        <span class="banner-message" id="banner-message">Waiting for ESP32 data... Power on your device to start telemetry streaming.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- TAB 1: DASHBOARD -->
+    <section id="tab-dashboard" class="tab-content active">
+
+      <!-- KPI Summary Cards Grid -->
+      <div class="kpi-grid">
+
+        <!-- Card 1: Total Magnetic Events -->
+        <div class="card kpi-card">
+          <div class="card-header">
+            <span class="card-title">Total Magnetic Events</span>
+            <div class="card-icon-badge cyan">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value cyan-glow" id="total-events">0</div>
+            <div class="kpi-meta">
+              <span class="kpi-subtext">Cumulative hardware count</span>
+              <span class="badge badge-subtle" id="event-trend-badge">Cumulative</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-note">A3144 Hall-Effect Edge Triggers</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Current Sensor Status -->
+        <div class="card kpi-card">
+          <div class="card-header">
+            <span class="card-title">Current Sensor Status</span>
+            <div class="card-icon-badge amber" id="sensor-icon-badge">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4M12 16h.01"></path></svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <div class="sensor-badge-container">
+              <div class="sensor-state-badge state-idle" id="sensor-state-badge">
+                <span class="state-pulse"></span>
+                <span id="sensor-state-text">NO MAGNET</span>
+              </div>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-subtext">Digital Pin State: <strong id="sensor-digital-pin">HIGH (Idle)</strong></span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-note">Active-LOW detection threshold</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Events Per Minute -->
+        <div class="card kpi-card">
+          <div class="card-header">
+            <span class="card-title">Events Per Minute</span>
+            <div class="card-icon-badge emerald">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value-row">
+              <div class="kpi-value" id="events-last-60s">0</div>
+              <span class="kpi-unit">/ min</span>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-subtext">Rate in last 60 seconds</span>
+              <span class="badge badge-emerald" id="rate-badge">IDLE</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-note">Rolling 60s sliding window</span>
+          </div>
+        </div>
+
+        <!-- Card 4: Last Event -->
+        <div class="card kpi-card">
+          <div class="card-header">
+            <span class="card-title">Last Event</span>
+            <div class="card-icon-badge violet">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value kpi-value-sm" id="last-event-time">Never</div>
+            <div class="kpi-meta">
+              <span class="kpi-subtext" id="last-event-relative">No detections recorded yet</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-note">Timestamp of latest trigger</span>
+          </div>
+        </div>
+
+        <!-- Card 5: Device Connection -->
+        <div class="card kpi-card">
+          <div class="card-header">
+            <span class="card-title">Device Connection</span>
+            <div class="card-icon-badge sky">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+            </div>
+          </div>
+          <div class="kpi-body">
+            <div class="kpi-value-row">
+              <div class="kpi-value kpi-value-sm" id="device-status-text">OFFLINE</div>
+            </div>
+            <div class="kpi-meta">
+              <span class="kpi-subtext">ID: <code id="device-id-tag">magnotrack-01</code></span>
+              <span class="badge badge-subtle" id="device-heartbeat-tag">Timeout: 30s</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="footer-note" id="device-uptime-label">Uptime: 00:00:00</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Live Charts Section -->
+      <div class="charts-grid">
+
+        <!-- Line Chart: Events Over Time -->
+        <div class="card chart-card">
+          <div class="chart-header">
+            <div class="chart-title-group">
+              <h3 class="chart-title">Cumulative Magnetic Events</h3>
+              <p class="chart-subtitle">Progression of total detected magnetic events over time</p>
+            </div>
+            <div class="chart-badge">Line Chart</div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="cumulativeEventsChart"></canvas>
+            <div class="chart-empty-state" id="chart1-empty">
+              <span>Waiting for ESP32 telemetry...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bar Chart: Activity Deltas & Flux Rate -->
+        <div class="card chart-card">
+          <div class="chart-header">
+            <div class="chart-title-group">
+              <h3 class="chart-title">Activity Frequency & Sensor State</h3>
+              <p class="chart-subtitle">Trigger count per interval and active sensor states</p>
+            </div>
+            <div class="chart-badge">Activity Rate</div>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="activityRateChart"></canvas>
+            <div class="chart-empty-state" id="chart2-empty">
+              <span>Waiting for ESP32 telemetry...</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Quick Recent Readings Table on Dashboard -->
+      <div class="card table-card">
+        <div class="card-header table-header">
+          <div class="header-left">
+            <h3 class="chart-title">Live Telemetry Stream</h3>
+            <p class="chart-subtitle">Most recent 5 sensor transmissions received via HTTP POST</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="switchToTab('history')">View Full History &rarr;</button>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="live-stream-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Device</th>
+                <th>Cumulative Count</th>
+                <th>Sensor State</th>
+                <th>ESP32 Uptime</th>
+                <th>Timestamp (UTC)</th>
+              </tr>
+            </thead>
+            <tbody id="live-stream-tbody">
+              <tr class="empty-row"><td colspan="6">No telemetry received yet. Waiting for ESP32...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 2: FULL EVENT HISTORY -->
+    <section id="tab-history" class="tab-content">
+      <div class="card table-card">
+        <div class="card-header table-header">
+          <div class="header-left">
+            <h3 class="chart-title">Sensor Readings & Magnetic Event Log</h3>
+            <p class="chart-subtitle">Comprehensive audit trail of every packet received from ESP32</p>
+          </div>
+          <div class="header-actions">
+            <button id="export-csv-btn" class="btn btn-secondary btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Export CSV
+            </button>
+            <button id="refresh-history-btn" class="btn btn-primary btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              Refresh Table
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter Controls -->
+        <div class="table-toolbar">
+          <div class="toolbar-item">
+            <label for="history-limit-select">Page Size:</label>
+            <select id="history-limit-select" class="form-select">
+              <option value="15">15 rows</option>
+              <option value="25" selected>25 rows</option>
+              <option value="50">50 rows</option>
+              <option value="100">100 rows</option>
+            </select>
+          </div>
+          <div class="toolbar-stats" id="history-total-count">
+            Total Records: 0
+          </div>
+        </div>
+
+        <!-- Full History Table -->
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Record ID</th>
+                <th>Device ID</th>
+                <th>Cumulative Events</th>
+                <th>Sensor Status</th>
+                <th>Device Uptime</th>
+                <th>Server Timestamp</th>
+                <th>Relative Time</th>
+              </tr>
+            </thead>
+            <tbody id="full-history-tbody">
+              <tr class="empty-row"><td colspan="7">No records found. ESP32 data will appear here automatically.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-bar">
+          <button id="page-prev-btn" class="btn btn-secondary btn-sm" disabled>&larr; Previous</button>
+          <span class="pagination-info" id="pagination-info">Page 1 of 1</span>
+          <button id="page-next-btn" class="btn btn-secondary btn-sm" disabled>Next &rarr;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SYSTEM INFORMATION -->
+    <section id="tab-system" class="tab-content">
+      <div class="system-grid">
+
+        <!-- System Architecture Card -->
+        <div class="card system-card">
+          <div class="card-header">
+            <h3 class="chart-title">System Specifications</h3>
+            <span class="badge badge-cyan">Architecture</span>
+          </div>
+          <div class="specs-list">
+            <div class="spec-row">
+              <span class="spec-label">Project Name</span>
+              <span class="spec-val">MagnoTrack</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Project Subtitle</span>
+              <span class="spec-val">IoT-Based Magnetic Event Logging System</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Target Device ID</span>
+              <span class="spec-val"><code>magnotrack-01</code></span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Magnetic Sensor</span>
+              <span class="spec-val">A3144 Hall-Effect Switch (Module HW-477)</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Microcontroller</span>
+              <span class="spec-val">ESP32 DevKit V1 (Tensilica 32-bit LX6)</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Communication Protocol</span>
+              <span class="spec-val">HTTP REST (JSON payload) over 2.4 GHz Wi-Fi</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Backend Framework</span>
+              <span class="spec-val">Python FastAPI (Asynchronous ASGI)</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Database</span>
+              <span class="spec-val">PostgreSQL (Relational + Time Indexed)</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Deployment Platform</span>
+              <span class="spec-val">Render Web Service + Render PostgreSQL</span>
+            </div>
+            <div class="spec-row">
+              <span class="spec-label">Local Development</span>
+              <span class="spec-val">Docker & Docker Compose</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hardware & Wiring Guide Card -->
+        <div class="card system-card">
+          <div class="card-header">
+            <h3 class="chart-title">Hardware Pinout & Wiring</h3>
+            <span class="badge badge-emerald">HW-477 to ESP32</span>
+          </div>
+          <p class="section-desc">
+            The A3144 Hall-effect module (HW-477) operates as a digital switch. When a magnet's South pole is brought within 5-10mm, the digital output pulls LOW.
+          </p>
+
+          <div class="wiring-table-wrapper">
+            <table class="data-table mini-table">
+              <thead>
+                <tr>
+                  <th>HW-477 Sensor Pin</th>
+                  <th>ESP32 Connection</th>
+                  <th>Description / Function</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>VCC</strong></td>
+                  <td><span class="pin-tag pin-power">3.3V</span></td>
+                  <td>3.3V DC Power Input (matches ESP32 logic level)</td>
+                </tr>
+                <tr>
+                  <td><strong>GND</strong></td>
+                  <td><span class="pin-tag pin-gnd">GND</span></td>
+                  <td>Common Ground</td>
+                </tr>
+                <tr>
+                  <td><strong>DO (Digital Out)</strong></td>
+                  <td><span class="pin-tag pin-gpio">GPIO 27</span></td>
+                  <td>Active-LOW digital signal (Interrupt with <code>INPUT_PULLUP</code>)</td>
+                </tr>
+                <tr>
+                  <td><strong>AO (Analog Out)</strong></td>
+                  <td><em>Not Connected</em></td>
+                  <td>A3144 is a digital switch; AO is not used</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="hardware-note">
+            <strong>Key Hardware Principles:</strong>
+            <ul>
+              <li><strong>Digital Switch:</strong> The A3144 provides pure on/off magnetic event switching. It is not an analog flux sensor.</li>
+              <li><strong>Cumulative Counting:</strong> The ESP32 maintains its own cumulative counter in RAM, preventing event loss even if an HTTP transmission fails.</li>
+              <li><strong>Debounce Filtering:</strong> 50ms software debounce prevents multi-triggering from contact vibration or magnet oscillation.</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- API Diagnostics & Endpoint Reference -->
+      <div class="card table-card" style="margin-top: 1.5rem;">
+        <div class="card-header">
+          <h3 class="chart-title">REST API Endpoints Reference</h3>
+          <span class="badge badge-subtle">FastAPI Specs</span>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Endpoint</th>
+                <th>Description</th>
+                <th>Request / Response</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="method-badge method-post">POST</span></td>
+                <td><code>/api/sensor-data</code></td>
+                <td>Called by ESP32 to upload cumulative event telemetry</td>
+                <td>Payload: <code>{"device_id": str, "event_count": int, "magnet_detected": bool, "uptime_ms": int}</code></td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/latest</code></td>
+                <td>Fetch the latest sensor reading and device online status</td>
+                <td>Returns reading object + online boolean (30s threshold)</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/stats</code></td>
+                <td>Calculated KPIs: total events, events in last 60s, device status</td>
+                <td>Returns summarized KPI payload for dashboard cards</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/history</code></td>
+                <td>Paginated historical records in descending chronological order</td>
+                <td>Params: <code>limit</code>, <code>offset</code>, <code>device_id</code></td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/chart-data</code></td>
+                <td>Formatted time-series vectors for Chart.js rendering</td>
+                <td>Params: <code>limit</code> (default 30)</td>
+              </tr>
+              <tr>
+                <td><span class="method-badge method-get">GET</span></td>
+                <td><code>/api/health</code></td>
+                <td>Backend and PostgreSQL database connectivity check</td>
+                <td>Returns <code>{"status": "healthy", "database": "active"}</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Dashboard Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <div class="footer-brand">
+        <strong>MagnoTrack</strong> &mdash; IoT-Based Magnetic Event Logging and Activity Monitoring System
+      </div>
+      <div class="footer-meta">
+        <span class="footer-item">Backend: <span class="badge-accent">FastAPI</span></span>
+        <span class="footer-item">DB: <span class="badge-accent">PostgreSQL</span></span>
+        <span class="footer-item">Microcontroller: <span class="badge-accent">ESP32</span></span>
+        <span class="footer-item" id="utc-clock">UTC 00:00:00</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Dashboard JavaScript -->
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>

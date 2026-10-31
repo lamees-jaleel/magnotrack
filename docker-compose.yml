@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: magnotrack_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: magnotrack
+      POSTGRES_PASSWORD: magnotrack_secret
+      POSTGRES_DB: magnotrack_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U magnotrack -d magnotrack_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: magnotrack_api
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://magnotrack:magnotrack_secret@db:5432/magnotrack_db
+      - PORT=8000
+      - CORS_ORIGINS=*
+      - DEVICE_OFFLINE_THRESHOLD_SECONDS=30
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount app folder locally for real-time live reloading during development
+      - ./app:/app/app
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
