@@ -8,10 +8,10 @@
  *   - Two Small Permanent Magnets (Neodymium or Ferrite)
  *
  * Pin Connections:
- *   - HW-477 VCC  -> ESP32 3.3V (or 5V; 3.3V recommended for logic level safety)
+ *   - HW-477 VCC  -> ESP32 3.3V (protects ESP32 GPIO logic level)
  *   - HW-477 GND  -> ESP32 GND
  *   - HW-477 DO   -> ESP32 GPIO 27 (configured with INPUT_PULLUP)
- *   - HW-477 AO   -> Not Connected (A3144 is a digital switch, not an analog sensor)
+ *   - HW-477 AO   -> Not Connected (A3144 is a digital threshold switch)
  *
  * Sensor Behavior:
  *   - A3144 is active LOW: DO = LOW when South magnetic pole is present.
@@ -22,23 +22,18 @@
  */
 
 #include <WiFi.h>
-#include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 
 // ======================================================================================
-// 1. CONFIGURATION PARAMETERS (EDIT THESE FOR YOUR SETUP)
+// 1. CONFIGURATION PARAMETERS
 // ======================================================================================
 
 // Wi-Fi or Mobile Hotspot Credentials
-// (e.g. Android Mobile Hotspot)
 const char* WIFI_SSID     = "Al-Haji";       // Your Wi-Fi or Mobile Hotspot Name
-const char* WIFI_PASSWORD = "94971148";   // Enter your Wi-Fi or Hotspot password
+const char* WIFI_PASSWORD = "94971148";      // Enter your Wi-Fi or Hotspot password
 
-/*
- * Backend API Endpoint:
- * Configured with your live Render Web Service URL!
- */
-const char* API_URL = "https://magnotrack.onrender.com/api/sensor-data";
+// Backend API Endpoint on Render
+const char* API_URL       = "https://magnotrack.onrender.com/api/sensor-data";
 
 // Device & Sensor Hardware Pins
 const char* DEVICE_ID            = "magnotrack-01";
@@ -119,7 +114,7 @@ void connectWiFi() {
 }
 
 // ======================================================================================
-// 4. HTTP TELEMETRY TRANSMISSION
+// 4. HTTP / HTTPS TELEMETRY TRANSMISSION (DIRECT SECURE SOCKET)
 // ======================================================================================
 
 void sendTelemetry() {
@@ -139,7 +134,6 @@ void sendTelemetry() {
   unsigned long uptimeMs = millis();
 
   // 2. Build JSON payload string
-  // Format: {"device_id":"magnotrack-01","event_count":12,"magnet_detected":true,"uptime_ms":120000}
   String payload = "{";
   payload += "\"device_id\":\"" + String(DEVICE_ID) + "\",";
   payload += "\"event_count\":" + String(countSnapshot) + ",";
@@ -147,48 +141,109 @@ void sendTelemetry() {
   payload += "\"uptime_ms\":" + String(uptimeMs);
   payload += "}";
 
-  // 3. Initialize HTTP / HTTPS client
-  HTTPClient http;
-  bool isHttps = String(API_URL).startsWith("https://");
+  // 3. Parse host and path from API_URL
+  String urlStr = String(API_URL);
+  bool isHttps = urlStr.startsWith("https://");
+  String temp = isHttps ? urlStr.substring(8) : (urlStr.startsWith("http://") ? urlStr.substring(7) : urlStr);
 
-  // Keep client objects alive in function scope for the full duration of http.POST()
-  WiFiClientSecure secureClient;
-  WiFiClient plainClient;
+  int slashIdx = temp.indexOf('/');
+  String host = (slashIdx >= 0) ? temp.substring(0, slashIdx) : temp;
+  String path = (slashIdx >= 0) ? temp.substring(slashIdx) : "/";
 
-  if (isHttps) {
-    // For Render HTTPS deployment: use WiFiClientSecure with certificate validation bypassed
-    secureClient.setInsecure(); // Allows connection to Render's SSL without certificate bundle
-    secureClient.setTimeout(10); // 10 second socket timeout
-    http.begin(secureClient, API_URL);
-  } else {
-    // For local HTTP development
-    plainClient.setTimeout(10);
-    http.begin(plainClient, API_URL);
+  int port = isHttps ? 443 : 80;
+  int colonIdx = host.indexOf(':');
+  if (colonIdx >= 0) {
+    port = host.substring(colonIdx + 1).toInt();
+    host = host.substring(0, colonIdx);
   }
 
-  http.addHeader("Content-Type", "application/json");
-  http.setTimeout(10000); // 10 second HTTP timeout
-
-  Serial.print("[HTTP POST] Sending payload: ");
+  Serial.printf("[HTTP POST] Sending payload to %s:%d%s\n", host.c_str(), port, path.c_str());
+  Serial.print("[HTTP POST] Payload: ");
   Serial.println(payload);
 
-  int httpResponseCode = http.POST(payload);
+  if (isHttps) {
+    // Direct TLS/SSL connection with SNI support to prevent Cloudflare 400 errors
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure(); // Skip certificate bundle validation on ESP32
+    secureClient.setTimeout(10); // 10 second socket timeout
 
-  if (httpResponseCode > 0) {
-    Serial.printf("[HTTP] Response Status: %d\n", httpResponseCode);
-    if (httpResponseCode == 200 || httpResponseCode == 201) {
+    if (!secureClient.connect(host.c_str(), port)) {
+      Serial.println("[HTTP ERROR] Secure TLS handshake failed! Check network/host.");
+      return;
+    }
+
+    // Send HTTP POST over encrypted TLS tunnel
+    secureClient.print("POST " + path + " HTTP/1.1\r\n");
+    secureClient.print("Host: " + host + "\r\n");
+    secureClient.print("User-Agent: ESP32-MagnoTrack\r\n");
+    secureClient.print("Content-Type: application/json\r\n");
+    secureClient.print("Connection: close\r\n");
+    secureClient.print("Content-Length: " + String(payload.length()) + "\r\n");
+    secureClient.print("\r\n");
+    secureClient.print(payload);
+
+    // Wait for server response
+    unsigned long timeout = millis();
+    while (secureClient.available() == 0) {
+      if (millis() - timeout > 8000) {
+        Serial.println("[HTTP ERROR] Timeout waiting for Render response.");
+        secureClient.stop();
+        return;
+      }
+      delay(10);
+    }
+
+    String statusLine = secureClient.readStringUntil('\n');
+    statusLine.trim();
+    Serial.printf("[HTTP] Response: %s\n", statusLine.c_str());
+
+    if (statusLine.indexOf("200") > 0 || statusLine.indexOf("201") > 0) {
       Serial.println("[HTTP] Telemetry recorded successfully by MagnoTrack backend.");
     } else {
-      String responseBody = http.getString();
-      Serial.printf("[HTTP] Server Message: %s\n", responseBody.c_str());
+      Serial.println("[HTTP] Notice: Non-200 status response.");
     }
-  } else {
-    Serial.printf("[HTTP ERROR] POST failed: %s (code %d)\n",
-      http.errorToString(httpResponseCode).c_str(), httpResponseCode);
-    Serial.println("  -> Check if API_URL is reachable and server is running.");
-  }
 
-  http.end();
+    secureClient.stop();
+
+  } else {
+    // Plain HTTP for local development
+    WiFiClient client;
+    client.setTimeout(10);
+
+    if (!client.connect(host.c_str(), port)) {
+      Serial.println("[HTTP ERROR] Connection to host failed.");
+      return;
+    }
+
+    client.print("POST " + path + " HTTP/1.1\r\n");
+    client.print("Host: " + host + "\r\n");
+    client.print("User-Agent: ESP32-MagnoTrack\r\n");
+    client.print("Content-Type: application/json\r\n");
+    client.print("Connection: close\r\n");
+    client.print("Content-Length: " + String(payload.length()) + "\r\n");
+    client.print("\r\n");
+    client.print(payload);
+
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+      if (millis() - timeout > 8000) {
+        Serial.println("[HTTP ERROR] Timeout waiting for local server response.");
+        client.stop();
+        return;
+      }
+      delay(10);
+    }
+
+    String statusLine = client.readStringUntil('\n');
+    statusLine.trim();
+    Serial.printf("[HTTP] Response: %s\n", statusLine.c_str());
+
+    if (statusLine.indexOf("200") > 0 || statusLine.indexOf("201") > 0) {
+      Serial.println("[HTTP] Telemetry recorded successfully by MagnoTrack backend.");
+    }
+
+    client.stop();
+  }
 }
 
 // ======================================================================================
