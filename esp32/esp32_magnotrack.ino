@@ -31,8 +31,8 @@
 
 // Wi-Fi or Mobile Hotspot Credentials
 // (e.g. Android Mobile Hotspot)
-const char* WIFI_SSID     = "iQOO Neo9 Pro";       // Your Wi-Fi or Mobile Hotspot Name
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";   // Enter your Wi-Fi or Hotspot password
+const char* WIFI_SSID     = "Al-Haji";       // Your Wi-Fi or Mobile Hotspot Name
+const char* WIFI_PASSWORD = "94971148";   // Enter your Wi-Fi or Hotspot password
 
 /*
  * Backend API Endpoint:
@@ -151,19 +151,23 @@ void sendTelemetry() {
   HTTPClient http;
   bool isHttps = String(API_URL).startsWith("https://");
 
+  // Keep client objects alive in function scope for the full duration of http.POST()
+  WiFiClientSecure secureClient;
+  WiFiClient plainClient;
+
   if (isHttps) {
     // For Render HTTPS deployment: use WiFiClientSecure with certificate validation bypassed
-    WiFiClientSecure secureClient;
-    secureClient.setInsecure(); // Allows connection to Render's Let's Encrypt SSL
+    secureClient.setInsecure(); // Allows connection to Render's SSL without certificate bundle
+    secureClient.setTimeout(10); // 10 second socket timeout
     http.begin(secureClient, API_URL);
   } else {
     // For local HTTP development
-    WiFiClient plainClient;
+    plainClient.setTimeout(10);
     http.begin(plainClient, API_URL);
   }
 
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(8000); // 8 second network timeout
+  http.setTimeout(10000); // 10 second HTTP timeout
 
   Serial.print("[HTTP POST] Sending payload: ");
   Serial.println(payload);
